@@ -36,14 +36,6 @@ impl Config {
     pub fn queries_dir(&self) -> PathBuf {
         self.out_dir.join("queries")
     }
-
-    pub fn repo_cache_dir(&self) -> PathBuf {
-        self.cache_dir.join("repos")
-    }
-
-    pub fn nvim_snippet(&self) -> String {
-        "vim.opt.runtimepath:prepend(vim.env.TREEBOX_OUT or vim.fn.stdpath('data') .. '/treebox')\n\nvim.api.nvim_create_autocmd('FileType', {\n  callback = function()\n    pcall(vim.treesitter.start)\n  end,\n})".to_string()
-    }
 }
 
 fn default_out_dir() -> Result<PathBuf> {

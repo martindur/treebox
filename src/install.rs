@@ -31,7 +31,7 @@ pub fn list(config: &Config, only_installed: bool) -> Result<()> {
     Ok(())
 }
 
-pub fn add(config: &Config, languages: &[String], cache_repos: bool) -> Result<()> {
+pub fn add(config: &Config, languages: &[String]) -> Result<()> {
     let registry = registry::load()?;
     let resolved = registry::resolve(&registry, languages)?;
     let mut metadata = Metadata::load(config)?;
@@ -43,7 +43,7 @@ pub fn add(config: &Config, languages: &[String], cache_repos: bool) -> Result<(
             .get(&lang)
             .with_context(|| format!("unknown language '{lang}'"))?;
         println!("Installing {lang}");
-        let installed = install_language(config, &lang, entry, cache_repos)?;
+        let installed = install_language(config, &lang, entry)?;
         metadata.languages.insert(lang, installed);
         metadata.save(config)?;
     }
@@ -74,14 +74,14 @@ pub fn remove(config: &Config, languages: &[String]) -> Result<()> {
     metadata.save(config)
 }
 
-pub fn update(config: &Config, languages: &[String], cache_repos: bool) -> Result<()> {
+pub fn update(config: &Config, languages: &[String]) -> Result<()> {
     let installed = Metadata::load(config)?;
     let requested = if languages.is_empty() {
         installed.languages.keys().cloned().collect()
     } else {
         languages.to_vec()
     };
-    add(config, &requested, cache_repos)
+    add(config, &requested)
 }
 
 pub fn status(config: &Config) -> Result<()> {
@@ -129,7 +129,6 @@ fn install_language(
     config: &Config,
     lang: &str,
     entry: &RegistryEntry,
-    cache_repos: bool,
 ) -> Result<InstalledLanguage> {
     match &entry.source {
         Source::ExternalQueries {
@@ -137,8 +136,8 @@ fn install_language(
             queries_url,
             ..
         } => {
-            let parser_repo = fetch_repo(config, parser_url, cache_repos)?;
-            let queries_repo = fetch_repo(config, queries_url, cache_repos)?;
+            let parser_repo = fetch_repo(config, parser_url)?;
+            let queries_repo = fetch_repo(config, queries_url)?;
             build_parser(config, lang, parser_repo.path(), &entry.source)?;
             install_queries(config, lang, queries_repo.path(), &entry.source)?;
             Ok(InstalledLanguage {
@@ -149,7 +148,7 @@ fn install_language(
             })
         }
         Source::SelfContained { url, .. } => {
-            let repo = fetch_repo(config, url, cache_repos)?;
+            let repo = fetch_repo(config, url)?;
             build_parser(config, lang, repo.path(), &entry.source)?;
             install_queries(config, lang, repo.path(), &entry.source)?;
             Ok(InstalledLanguage {
@@ -160,7 +159,7 @@ fn install_language(
             })
         }
         Source::QueriesOnly { url, .. } => {
-            let repo = fetch_repo(config, url, cache_repos)?;
+            let repo = fetch_repo(config, url)?;
             install_queries(config, lang, repo.path(), &entry.source)?;
             Ok(InstalledLanguage {
                 parser_url: None,
@@ -204,11 +203,7 @@ impl SourceRepo {
     }
 }
 
-fn fetch_repo(config: &Config, url: &str, cache_repos: bool) -> Result<SourceRepo> {
-    if cache_repos {
-        return fetch_cached_repo(config, url);
-    }
-
+fn fetch_repo(config: &Config, url: &str) -> Result<SourceRepo> {
     fs::create_dir_all(&config.cache_dir)
         .with_context(|| format!("failed to create {}", config.cache_dir.display()))?;
     let temp = tempfile::Builder::new()
@@ -233,34 +228,6 @@ fn fetch_repo(config: &Config, url: &str, cache_repos: bool) -> Result<SourceRep
         path,
         _temp: Some(temp),
     })
-}
-
-fn fetch_cached_repo(config: &Config, url: &str) -> Result<SourceRepo> {
-    fs::create_dir_all(config.repo_cache_dir())
-        .with_context(|| format!("failed to create {}", config.repo_cache_dir().display()))?;
-    let path = config.repo_cache_dir().join(repo_cache_name(url));
-
-    if path.exists() {
-        run(Command::new("git")
-            .arg("-C")
-            .arg(&path)
-            .arg("fetch")
-            .arg("--all"))?;
-        run(Command::new("git")
-            .arg("-C")
-            .arg(&path)
-            .arg("pull")
-            .arg("--ff-only"))?;
-    } else {
-        run(Command::new("git")
-            .arg("clone")
-            .arg("--depth")
-            .arg("1")
-            .arg(url)
-            .arg(&path))?;
-    }
-
-    Ok(SourceRepo { path, _temp: None })
 }
 
 fn build_parser(config: &Config, lang: &str, repo: &Path, source: &Source) -> Result<()> {
@@ -394,13 +361,6 @@ fn output(command: &mut Command) -> Result<String> {
 
 fn command_name(command: &Command) -> String {
     format!("{command:?}")
-}
-
-fn repo_cache_name(url: &str) -> String {
-    url.trim_end_matches(".git")
-        .chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-        .collect()
 }
 
 fn short_ref(reference: &str) -> String {

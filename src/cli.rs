@@ -12,10 +12,6 @@ pub struct Cli {
     #[arg(long, global = true)]
     pub out: Option<PathBuf>,
 
-    /// Keep cloned parser/query repositories in the Treebox cache.
-    #[arg(long, global = true)]
-    pub cache_repos: bool,
-
     #[command(subcommand)]
     pub command: Command,
 }
@@ -46,6 +42,4 @@ pub enum Command {
     Status,
     /// Check local tools and paths.
     Doctor,
-    /// Print the Neovim runtimepath snippet.
-    Nvim,
 }
