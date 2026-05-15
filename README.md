@@ -12,7 +12,7 @@ treebox add typescript html css
 Add Treebox to your Neovim runtime path:
 
 ```lua
-vim.opt.runtimepath:prepend(vim.env.TREEBOX_OUT or vim.fn.stdpath('data') .. '/treebox')
+vim.opt.runtimepath:prepend(vim.env.TREEBOX_OUT or vim.fn.expand('~/.local/share/treebox'))
 
 vim.api.nvim_create_autocmd('FileType', {
   callback = function()

@@ -62,6 +62,10 @@ pub enum Source {
 #[allow(dead_code)]
 pub struct ParserManifest {
     #[serde(default)]
+    pub url: Option<String>,
+    #[serde(default)]
+    pub parser_version: Option<String>,
+    #[serde(default)]
     pub location: Option<String>,
     #[serde(default)]
     pub queries_dir: Option<String>,

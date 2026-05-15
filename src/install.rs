@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output};
 
 use anyhow::{bail, Context, Result};
 use tempfile::TempDir;
@@ -42,8 +42,9 @@ pub fn add(config: &Config, languages: &[String]) -> Result<()> {
         let entry = registry
             .get(&lang)
             .with_context(|| format!("unknown language '{lang}'"))?;
-        println!("Installing {lang}");
-        let installed = install_language(config, &lang, entry)?;
+        println!("Installing {lang}...");
+        let installed = install_language(config, &lang, entry)
+            .with_context(|| format!("failed to install {lang}"))?;
         metadata.languages.insert(lang, installed);
         metadata.save(config)?;
     }
@@ -136,12 +137,20 @@ fn install_language(
             queries_url,
             ..
         } => {
-            let parser_repo = fetch_repo(config, parser_url)?;
             let queries_repo = fetch_repo(config, queries_url)?;
+            let manifest = registry::parser_manifest(queries_repo.path())?;
+            let parser_url = manifest
+                .as_ref()
+                .and_then(|manifest| manifest.url.as_deref())
+                .unwrap_or(parser_url);
+            let parser_ref = manifest
+                .as_ref()
+                .and_then(|manifest| manifest.parser_version.as_deref());
+            let parser_repo = fetch_repo_at(config, parser_url, parser_ref)?;
             build_parser(config, lang, parser_repo.path(), &entry.source)?;
             install_queries(config, lang, queries_repo.path(), &entry.source)?;
             Ok(InstalledLanguage {
-                parser_url: Some(parser_url.clone()),
+                parser_url: Some(parser_url.to_string()),
                 parser_ref: Some(git_head(parser_repo.path())?),
                 queries_url: Some(queries_url.clone()),
                 queries_ref: Some(git_head(queries_repo.path())?),
@@ -204,6 +213,10 @@ impl SourceRepo {
 }
 
 fn fetch_repo(config: &Config, url: &str) -> Result<SourceRepo> {
+    fetch_repo_at(config, url, None)
+}
+
+fn fetch_repo_at(config: &Config, url: &str, git_ref: Option<&str>) -> Result<SourceRepo> {
     fs::create_dir_all(&config.cache_dir)
         .with_context(|| format!("failed to create {}", config.cache_dir.display()))?;
     let temp = tempfile::Builder::new()
@@ -217,12 +230,45 @@ fn fetch_repo(config: &Config, url: &str) -> Result<SourceRepo> {
         })?;
     let path = temp.path().join("repo");
 
-    run(Command::new("git")
-        .arg("clone")
-        .arg("--depth")
-        .arg("1")
-        .arg(url)
-        .arg(&path))?;
+    if let Some(git_ref) = git_ref {
+        run(Command::new("git").arg("init").arg("--quiet").arg(&path))
+            .with_context(|| format!("failed to initialize source repo {url}"))?;
+        run(Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("remote")
+            .arg("add")
+            .arg("origin")
+            .arg(url))
+        .with_context(|| format!("failed to configure source repo {url}"))?;
+        run(Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("fetch")
+            .arg("--quiet")
+            .arg("--depth")
+            .arg("1")
+            .arg("origin")
+            .arg(git_ref))
+        .with_context(|| format!("failed to fetch source repo {url} at {git_ref}"))?;
+        run(Command::new("git")
+            .arg("-C")
+            .arg(&path)
+            .arg("checkout")
+            .arg("--quiet")
+            .arg("--detach")
+            .arg("FETCH_HEAD"))
+        .with_context(|| format!("failed to checkout source repo {url} at {git_ref}"))?;
+    } else {
+        run(Command::new("git")
+            .arg("clone")
+            .arg("--quiet")
+            .arg("--depth")
+            .arg("1")
+            .arg(url)
+            .arg(&path))
+        .with_context(|| format!("failed to fetch source repo {url}"))?;
+    }
 
     Ok(SourceRepo {
         path,
@@ -248,7 +294,8 @@ fn build_parser(config: &Config, lang: &str, repo: &Path, source: &Source) -> Re
         .arg("build")
         .arg("-o")
         .arg(&staging)
-        .arg(&parser_source))?;
+        .arg(&parser_source))
+    .with_context(|| format!("failed to build parser for {lang}"))?;
 
     fs::rename(&staging, &output).with_context(|| {
         format!(
@@ -340,11 +387,15 @@ fn check_tool(tool: &str) -> Result<()> {
 }
 
 fn run(command: &mut Command) -> Result<()> {
-    let status = command
-        .status()
+    let output = command
+        .output()
         .with_context(|| format!("failed to run {}", command_name(command)))?;
-    if !status.success() {
-        bail!("command failed: {}", command_name(command));
+    if !output.status.success() {
+        bail!(
+            "command failed: {}\n{}",
+            command_name(command),
+            command_output(&output)
+        );
     }
     Ok(())
 }
@@ -361,6 +412,17 @@ fn output(command: &mut Command) -> Result<String> {
 
 fn command_name(command: &Command) -> String {
     format!("{command:?}")
+}
+
+fn command_output(output: &Output) -> String {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    let text = format!("{}{}", stdout, stderr).trim().to_string();
+    if text.is_empty() {
+        "no command output".to_string()
+    } else {
+        text
+    }
 }
 
 fn short_ref(reference: &str) -> String {
