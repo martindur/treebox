@@ -1,6 +1,12 @@
 # treebox
 
-`treebox` installs curated Tree-sitter parsers and queries.
+`treebox` installs curated tree-sitter grammars.
+
+## Motivation
+
+The core functionality here is very similar to _any_ neovim plugin
+that helps curate tree-sitter grammars. This is just a way of managing
+them independently of neovim.
 
 ## Install
 
