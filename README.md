@@ -69,3 +69,10 @@ Treebox uses a bundled snapshot of the registry maintained by
 [`neovim-treesitter`](https://github.com/neovim-treesitter/treesitter-parser-registry).
 
 Thanks for making such a registry available in the first place!
+
+## AI Disclaimer
+
+Code was written with the help of an LLM. Most of it has been checked by using
+the tool rather than by carefully reading every line of code.
+
+I am not very strong in Rust, so use at the mercy of our AI lords.
