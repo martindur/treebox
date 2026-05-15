@@ -2,6 +2,22 @@
 
 `treebox` installs curated Tree-sitter parsers and queries.
 
+## Install
+
+```sh
+cargo install --git https://github.com/martindur/treebox
+```
+
+Treebox also expects these tools to be available:
+
+```text
+git
+tree-sitter
+cc, gcc, or clang
+```
+
+Run `treebox doctor` to check the local environment.
+
 ## Usage
 
 ```sh
@@ -41,14 +57,9 @@ treebox status
 treebox doctor
 ```
 
-## Requirements
+## Registry
 
-Treebox expects these tools to be available:
+Treebox uses a bundled snapshot of the registry maintained by
+[`neovim-treesitter`](https://github.com/neovim-treesitter/treesitter-parser-registry).
 
-```text
-git
-tree-sitter
-cc, gcc, or clang
-```
-
-Run `treebox doctor` to check the local environment.
+Thanks for making such a registry available in the first place!
